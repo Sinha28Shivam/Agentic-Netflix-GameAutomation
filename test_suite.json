@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1,
+    "title": "Game Discovery - Tabs",
+    "package": "com.netflix.mediaclient",
+    "goal": "Launch Netflix, select a profile if prompted, navigate to the Games section tab, and verify that the Games section catalog is loaded and visible.",
+    "type": "netflix_app"
+  },
+  {
+    "id": 2,
+    "title": "Game Discovery - Catalog Scroll",
+    "package": "com.netflix.mediaclient",
+    "goal": "Launch Netflix, navigate to the Games tab, scroll down the catalog list to verify that game items and listings load successfully.",
+    "type": "netflix_app"
+  },
+  {
+    "id": 3,
+    "title": "Search Game",
+    "package": "com.netflix.mediaclient",
+    "goal": "Launch Netflix, open the Search interface, type 'Snake.io' in the search bar, submit the search, and verify that the Snake.io game card appears in results.",
+    "type": "netflix_app"
+  },
+  {
+    "id": 4,
+    "title": "Game Details Screen",
+    "package": "com.netflix.mediaclient",
+    "goal": "Launch Netflix, search for 'Snake.io', click on the game card to open its details page, and verify the title, description, and screenshots are visible.",
+    "type": "netflix_app"
+  },
+  {
+    "id": 5,
+    "title": "Install Game Redirect",
+    "package": "com.netflix.mediaclient",
+    "goal": "Launch Netflix, open the details page for 'Snake.io', click 'Get Game' or 'Install', verify it redirects to the Google Play Store, and trigger installation.",
+    "type": "netflix_app"
+  },
+  {
+    "id": 6,
+    "title": "Launch Installed Game",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Verify the installed Snake.io game launches successfully and passes the splash loading screen.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 7,
+    "title": "Netflix Member Authentication",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Launch Snake.io, select the member profile 'Shivam' from the Netflix profile selection screen, and verify the game enters the main lobby.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 9,
+    "title": "Resume Gameplay Save",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Launch Snake.io, tap Play, trigger 1 movement, exit the game using force close, relaunch, and verify that the UI allows resuming the save.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 11,
+    "title": "Offline Mode Launch",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Disable Wi-Fi and mobile data using the network toggle skill, launch Snake.io, and verify that the game can be launched and played offline.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 16,
+    "title": "Orientation - Landscape Layout",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Launch Snake.io, force the device orientation to landscape mode using the rotate skill, and verify that the screen boundaries layout adapts correctly.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 30,
+    "title": "Crash Recovery Check",
+    "package": "com.netflix.NGP.Snakeio",
+    "goal": "Launch Snake.io, play a match, trigger a sudden application crash by killing the package, relaunch, and verify that the game recovers cleanly.",
+    "netflix_game": "snake"
+  },
+  {
+    "id": 100,
+    "title": "Full AI Scenario - Snake",
+    "package": "com.netflix.mediaclient",
+    "goal": "1. Launch netfilx, 2. if any popup is there close it, and search snake.io 3. wait till Download the game, 4. Play the Snake match and survive as long as possible, 5. and all the decision taken from AI, and display me what AI is seeing, If asking for profile selection then select shivam",
+    "type": "netflix_app"
+  }
+]
