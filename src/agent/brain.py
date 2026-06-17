@@ -299,8 +299,14 @@ class GameAgentBrain:
             f"Goal: {goal}\n\n"
             f"Recent History:\n{history_str}\n\n"
             f"Available UI Elements:\n{elements_str}\n\n"
-            f"Respond ONLY with a JSON object: "
-            f'{{"action", "coordinates", "target_label", "expected_outcome", "analysis"}}'
+            f"Respond ONLY with a raw JSON object containing these keys:\n"
+            f"{{\n"
+            f'  "analysis": "reasoning/thought process",\n'
+            f'  "action": "TAP" | "SWIPE" | "WAIT" | "KEY_BACK" | "SUCCESS" | "FAILED",\n'
+            f'  "coordinates": [x, y] or [x1, y1, x2, y2] or null,\n'
+            f'  "target_label": "short label of target",\n'
+            f'  "expected_outcome": "what should change on screen to verify success"\n'
+            f"}}"
         )
 
         if self.azure_client:
