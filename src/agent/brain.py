@@ -6,6 +6,7 @@ from io import BytesIO
 from PIL import Image
 from typing import Dict, Any, List
 from src.agent.memory import AgentMemory
+from src.utils.logger import automation_logger
 
 # Support Google Gemini GenAI SDK
 try:
@@ -75,6 +76,28 @@ class GameAgentBrain:
         """
         Query the active model (Azure GPT-4o or Gemini VLM) with screenshot and UI elements to get the next action.
         """
+        # ── DRM mode check ──
+        drm_blocked = screenshot.info.get("drm_blocked", False)
+        
+        if drm_blocked and not actionable_elements:
+            # Completely blind — defensive guard
+            return {
+                "analysis": "Agent is blind. No screenshot and no UI elements due to DRM/render block.",
+                "action": "FAILED",
+                "coordinates": None,
+                "target_label": "DRM Blocked",
+                "expected_outcome": "None"
+            }
+        
+        if drm_blocked:
+            automation_logger.warning(
+                "[Brain] DRM mode: skipping vision input. "
+                "Reasoning from accessibility tree only."
+            )
+            return self._decide_from_elements_only(
+                actionable_elements, memory, screen_size
+            )
+
         width, height = screen_size
 
         # Format actionable elements into readable text
@@ -245,3 +268,65 @@ class GameAgentBrain:
             "target_label": "Default Wait",
             "expected_outcome": "Status change"
         }
+
+    def _decide_from_elements_only(
+        self,
+        actionable_elements: List[Dict[str, Any]],
+        memory: AgentMemory,
+        screen_size: tuple[int, int]
+    ) -> Dict[str, Any]:
+        """
+        Fallback reasoning when screenshot is unavailable (DRM blocked).
+        Agent reasons purely from the accessibility XML element list.
+        """
+        width, height = screen_size
+        elements_summary = []
+        for el in actionable_elements:
+            elements_summary.append(
+                f"- ID: {el.get('resource-id', 'N/A')} | "
+                f"Text: '{el.get('text', '')}' | "
+                f"Desc: '{el.get('content-desc', '')}' | "
+                f"Class: {el.get('class', '').split('.')[-1]} | "
+                f"Center: ({el.get('center_x')}, {el.get('center_y')})"
+            )
+        elements_str = "\n".join(elements_summary) if elements_summary else "No interactive XML elements found."
+        history_str = memory.get_history_summary()
+        goal = memory.current_goal
+
+        prompt = (
+            f"You are a mobile automation agent. Screenshot is unavailable (DRM blocked).\n"
+            f"You must navigate using ONLY the UI element list below.\n\n"
+            f"Goal: {goal}\n\n"
+            f"Recent History:\n{history_str}\n\n"
+            f"Available UI Elements:\n{elements_str}\n\n"
+            f"Respond ONLY with a JSON object: "
+            f'{{"action", "coordinates", "target_label", "expected_outcome", "analysis"}}'
+        )
+
+        if self.azure_client:
+            try:
+                response = self.azure_client.chat.completions.create(
+                    model=self.azure_deployment,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.1
+                )
+                return self._parse_json_response(response.choices[0].message.content.strip())
+            except Exception as e:
+                automation_logger.error(f"[Brain] DRM fallback Azure API call failed: {e}")
+        
+        if self.client:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=[prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+                return self._parse_json_response(response.text.strip())
+            except Exception as e:
+                automation_logger.error(f"[Brain] DRM fallback Gemini call failed: {e}")
+
+        return self._generate_mock_decision(actionable_elements, memory)

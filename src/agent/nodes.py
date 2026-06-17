@@ -60,7 +60,7 @@ def normalize_coordinates(coords: list[int], screen_size: tuple[int, int]) -> li
 def capture_state_node(state: AgentState) -> Dict[str, Any]:
     """
     Senses the current device environment: dismisses popups, takes screenshots, 
-    and extracts XML elements.
+    and extracts XML elements. Handles DRM-blocked screens gracefully.
     """
     device = state["device"]
     guard = state["guard"]
@@ -75,19 +75,60 @@ def capture_state_node(state: AgentState) -> Dict[str, Any]:
         automation_logger.info("System alert dismissed by Guard. Cooling down 1.5s...")
         time.sleep(1.5)
 
-    # 3. Capture Screen & Hierarchy
+    # 3. Capture Screen
     screenshot = device.take_screenshot()
-    xml_content = device.dump_hierarchy()
-    actionable_elements = HierarchyParser.get_actionable_elements(xml_content)
-    
-    automation_logger.info(f"Screen captured ({screenshot.size}). XML elements found: {len(actionable_elements)}")
-    
-    # Check for timeout condition
+
+    # Determine status (timeout check)
     status = "running"
     if step_count > state["max_steps"]:
         automation_logger.warning("Max steps reached. Forcing loop timeout.")
         status = "timeout"
 
+    # 4. DRM Gate Check
+    if screenshot.info.get("drm_blocked"):
+        automation_logger.error(
+            "[CaptureState] DRM or screencap block detected. "
+            "Vision layer unavailable. Switching to accessibility-tree-only mode."
+        )
+        # Still attempt hierarchy dump — this works even when screenshot is blocked
+        xml_content = device.dump_hierarchy()
+        actionable_elements = HierarchyParser.get_actionable_elements(xml_content)
+        
+        if not actionable_elements:
+            # Both screenshot AND accessibility tree are dead — agent is completely blind
+            automation_logger.error(
+                "[CaptureState] Accessibility tree also empty. "
+                "Agent has no perception input. Terminating run."
+            )
+            return {
+                "screenshot": screenshot,
+                "hierarchy_xml": "",
+                "actionable_elements": [],
+                "step_count": step_count,
+                "status": "failed",
+                "last_result": "BLOCKED: No screenshot and no accessibility tree. DRM or render issue."
+            }
+        
+        # Accessibility tree exists — agent can still operate without vision
+        automation_logger.warning(
+            f"[CaptureState] Running in accessibility-tree-only mode. "
+            f"Elements found: {len(actionable_elements)}. Visual defect detection is disabled."
+        )
+        return {
+            "screenshot": screenshot,        # still passed — brain will get black image
+            "hierarchy_xml": xml_content,
+            "actionable_elements": actionable_elements,
+            "step_count": step_count,
+            "status": status,
+            "last_result": "DRM_MODE: Vision blocked. Using accessibility tree only."
+        }
+
+    # Normal path — screenshot is valid
+    xml_content = device.dump_hierarchy()
+    actionable_elements = HierarchyParser.get_actionable_elements(xml_content)
+    
+    automation_logger.info(f"Screen captured ({screenshot.size}). XML elements found: {len(actionable_elements)}")
+    
     return {
         "screenshot": screenshot,
         "hierarchy_xml": xml_content,

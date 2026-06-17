@@ -65,6 +65,11 @@ class ActionVerifier:
         Check if the action had a visual or state effect.
         """
         if action_type in ["TAP", "SWIPE"]:
+            # If screenshot is DRM blocked, we cannot verify pixel changes
+            if before_img.info.get("drm_blocked") or after_img.info.get("drm_blocked"):
+                print("[ActionVerifier] DRM block active on screenshot. Skipping pixel difference check.")
+                return True, "Action registered (DRM mode - skipped visual verification)."
+
             # Check for static screen (Phantom Clicks)
             change_pct = CVEngine.compute_pixel_diff(before_img, after_img)
             print(f"[ActionVerifier] Screen changed by {change_pct:.2f}% after {action_type}.")

@@ -3,8 +3,10 @@ import io
 import re
 import time
 import os
+import numpy as np
 from PIL import Image
 from src.device.base import BaseDevice
+from src.utils.logger import automation_logger
 
 # Auto-resolve common platform-tools paths on Windows to avoid manual PATH configuration
 ADB_EXE = "adb"
@@ -56,9 +58,20 @@ class ADBDevice(BaseDevice):
         full_cmd = self.adb_prefix + cmd_args
         return subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout)
 
+    def _is_black_frame(self, img: Image.Image, threshold: float = 0.99) -> bool:
+        """
+        Returns True if 99%+ of the image pixels are black.
+        Indicates either a DRM block or a screencap failure.
+        """
+        arr = np.array(img.convert("RGB"))
+        black_pixels = np.sum(np.all(arr < 10, axis=2))
+        total_pixels = arr.shape[0] * arr.shape[1]
+        return (black_pixels / total_pixels) >= threshold
+
     def take_screenshot(self) -> Image.Image:
         """
         Capture screenshot via raw pipe (adb exec-out screencap -p) for maximum speed.
+        Detects DRM-blocked screens (fully black) and sets info metadata.
         """
         full_cmd = self.adb_prefix + ["exec-out", "screencap", "-p"]
         try:
@@ -66,11 +79,25 @@ class ADBDevice(BaseDevice):
             res = subprocess.run(full_cmd, capture_output=True, timeout=15.0)
             if res.returncode != 0:
                 raise RuntimeError(f"ADB screencap failed: {res.stderr}")
-            return Image.open(io.BytesIO(res.stdout))
+            
+            img = Image.open(io.BytesIO(res.stdout))
+            
+            if self._is_black_frame(img):
+                automation_logger.warning(
+                    "[ADBDevice] Screenshot is black. "
+                    "Possible causes: (1) FLAG_SECURE/DRM active, "
+                    "(2) screencap pipe failure. "
+                    "Returning DRM_BLOCKED signal."
+                )
+                img.info["drm_blocked"] = True
+            
+            return img
         except Exception as e:
-            print(f"[ADBDevice] Failed to take screenshot: {e}")
+            automation_logger.error(f"[ADBDevice] Failed to take screenshot: {e}")
             # Fallback mock or empty image if it fails
-            return Image.new("RGB", (1080, 2400), color="black")
+            img = Image.new("RGB", (1080, 2400), color="black")
+            img.info["drm_blocked"] = True
+            return img
 
     def dump_hierarchy(self) -> str:
         """
