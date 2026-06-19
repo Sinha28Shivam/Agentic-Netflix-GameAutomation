@@ -28,3 +28,6 @@ class AgentState(TypedDict):
     
     # Terminal condition tracker
     status: str  # "running" | "success" | "failed" | "timeout"
+
+    # Loaded test scenario from test_suite.json
+    test_config: Optional[Dict[str, Any]]

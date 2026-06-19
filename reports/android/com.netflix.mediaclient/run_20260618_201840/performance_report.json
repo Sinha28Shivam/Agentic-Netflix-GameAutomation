@@ -1,0 +1,41 @@
+{
+    "metadata": {
+        "platform": "ANDROID",
+        "package_name": "com.netflix.mediaclient",
+        "os_version": "13",
+        "device_model": "M2101K6P",
+        "device_manufacturer": "Xiaomi",
+        "session_duration_seconds": 51.06,
+        "total_samples": 20
+    },
+    "cpu": {
+        "average_pct": 0.8,
+        "peak_pct": 0.8
+    },
+    "ram": {
+        "average_mb": 199.82,
+        "peak_mb": 216.27,
+        "final_mb": 213.03
+    },
+    "fps": {
+        "average": 58.54,
+        "minimum": 57.5,
+        "fifth_percentile": 57.54
+    },
+    "janks": {
+        "total_stutters": 9,
+        "janks_per_minute": 10.58
+    },
+    "frame_pacing": {
+        "average_std_dev_ms": 2.59
+    },
+    "gpu": {
+        "average_pct": 18.0,
+        "peak_pct": 18.0
+    },
+    "network": {
+        "average_ping_ms": 28.18,
+        "average_download_mbps": 64.21,
+        "total_packet_loss_pct": 0.0
+    }
+}

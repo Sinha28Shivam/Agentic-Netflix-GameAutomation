@@ -1,0 +1,41 @@
+{
+    "metadata": {
+        "platform": "ANDROID",
+        "package_name": "com.netflix.NGP.BloonsTDSix",
+        "os_version": "13",
+        "device_model": "M2101K6P",
+        "device_manufacturer": "Xiaomi",
+        "session_duration_seconds": 33.01,
+        "total_samples": 13
+    },
+    "cpu": {
+        "average_pct": 12.5,
+        "peak_pct": 12.5
+    },
+    "ram": {
+        "average_mb": 651.5,
+        "peak_mb": 966.76,
+        "final_mb": 966.76
+    },
+    "fps": {
+        "average": 58.93,
+        "minimum": 57.89,
+        "fifth_percentile": 58.19
+    },
+    "janks": {
+        "total_stutters": 4,
+        "janks_per_minute": 7.27
+    },
+    "frame_pacing": {
+        "average_std_dev_ms": 2.46
+    },
+    "gpu": {
+        "average_pct": 18.0,
+        "peak_pct": 18.0
+    },
+    "network": {
+        "average_ping_ms": 26.77,
+        "average_download_mbps": 65.54,
+        "total_packet_loss_pct": 0.0
+    }
+}

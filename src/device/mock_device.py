@@ -104,3 +104,8 @@ class MockDevice(BaseDevice):
     def stop_app(self, package_name: str) -> bool:
         print(f"[MockDevice] Stop app: {package_name}")
         return True
+
+    def input_text(self, text: str) -> bool:
+        print(f"[MockDevice] input_text: '{text}'")
+        self.last_inputs.append(("input_text", text))
+        return True

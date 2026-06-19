@@ -89,8 +89,10 @@ class ActionVerifier:
             clean_expected = expected_outcome.lower().strip()
             keywords = [w for w in clean_expected.split() if len(w) > 4]
             found_keywords = [w for w in keywords if w in post_xml.lower()]
-            
+
             if keywords and len(found_keywords) == 0:
-                print(f"[ActionVerifier] Warning: Expected terms '{keywords}' not found in new UI hierarchy.")
+                msg = f"Expected outcome not confirmed: terms {keywords} not found in new UI hierarchy."
+                print(f"[ActionVerifier] Warning: {msg}")
+                return False, msg
 
         return True, "Action registered successfully."

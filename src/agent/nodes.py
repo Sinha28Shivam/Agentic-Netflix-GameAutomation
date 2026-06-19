@@ -1,9 +1,11 @@
 import time
+import random
 from typing import Dict, Any
 from src.agent.state import AgentState
 from src.perception.hierarchy_parser import HierarchyParser
 from src.utils.logger import automation_logger
 from src.utils.guardrails import ActionVerifier
+from src.perception.cv_engine import CVEngine
 
 # Import all registered skills modularly
 from src.agent.skills import (
@@ -57,6 +59,29 @@ def normalize_coordinates(coords: list[int], screen_size: tuple[int, int]) -> li
         
     return [x, y]
 
+def _is_repeated_static_tap(action_history: list, coordinates) -> bool:
+    """Returns True if the last action was a TAP on the same coordinates that resulted in a static screen."""
+    if not action_history:
+        return False
+    last_act = action_history[-1].get("action", {})
+    return (
+        last_act.get("action") == "TAP"
+        and last_act.get("coordinates") == coordinates
+        and "static" in action_history[-1].get("result", "").lower()
+    )
+
+
+def _tap_with_offset_recovery(device, coords: list, screen_size: tuple, label: str) -> bool:
+    """Executes an offset double-tap to recover from a stuck tap on a static screen."""
+    w, h = screen_size
+    offset_x = max(0, min(coords[0] + random.choice([-25, 25]), w - 1))
+    offset_y = max(0, min(coords[1] + random.choice([-25, 25]), h - 1))
+    automation_logger.warning(f"[Action Recovery] {label}: Retrying with offset double-tap at ({offset_x}, {offset_y})")
+    device.tap(offset_x, offset_y)
+    time.sleep(0.15)
+    return device.tap(offset_x, offset_y)
+
+
 def capture_state_node(state: AgentState) -> Dict[str, Any]:
     """
     Senses the current device environment: dismisses popups, takes screenshots, 
@@ -78,7 +103,12 @@ def capture_state_node(state: AgentState) -> Dict[str, Any]:
     # 3. Capture Screen
     screenshot = device.take_screenshot()
 
-    # Determine status (timeout check)
+    # Preserve terminal status from previous node; only override for timeout
+    prior_status = state.get("status", "running")
+    if prior_status in ("success", "failed"):
+        automation_logger.info(f"[CaptureState] Terminal status '{prior_status}' carried from prior node. Passing to router.")
+        return {"step_count": step_count, "status": prior_status}
+
     status = "running"
     if step_count > state["max_steps"]:
         automation_logger.warning("Max steps reached. Forcing loop timeout.")
@@ -179,64 +209,47 @@ def menu_navigator_node(state: AgentState) -> Dict[str, Any]:
     # Execute Action
     success = False
     
+    # Pull dynamic values from test config (no hardcoding)
+    test_config = state.get("test_config") or {}
+    profile_name = test_config.get("profile_name", "")
+    game_name = test_config.get("game_name", "")
+    game_package = test_config.get("game_package", state["package"])
+    active_package = state["package"]
+
     # Check if a specific high-level skill should be triggered
-    # (Matches label or action keyword strings)
     normalized_target = target_label.lower()
     normalized_action = action_type.lower()
-    
+
     if "games tab" in normalized_target or "open_games_tab" in normalized_action:
         success = open_games_tab(device)
-    elif "profile" in normalized_target and "select" in normalized_action:
-        # Extract profile name from target label or goal
-        profile_name = "Shivam"
-        if "shivan" in normalized_target:
-            profile_name = "Shivani"
+    elif "profile" in normalized_target and ("select" in normalized_action or "select" in normalized_target):
+        # Use profile_name from test_config; fall back to extracting from target label
+        if not profile_name:
+            words = normalized_target.replace("select", "").replace("profile", "").split()
+            profile_name = words[0].capitalize() if words else "Default"
         success = select_netflix_profile(device, profile_name)
     elif "search" in normalized_action or "search" in normalized_target:
-        # Extract name to search
-        game_name = "Snake"
-        if "snake" in state["goal"].lower():
-            game_name = "Snake.io"
-        success = search_game_by_name(device, game_name)
+        # Use game_name from test_config; fall back to extracting from target label
+        search_name = game_name or target_label.lower().replace("search", "").replace("for", "").strip()
+        success = search_game_by_name(device, search_name)
     elif "scroll" in normalized_action or "swipe catalog" in normalized_target:
         direction = "down" if "down" in normalized_target else "up"
         success = scroll_catalog(device, direction)
     elif "install" in normalized_action or "install" in normalized_target:
-        game_pkg = "com.netflix.NGP.Snakeio" if "snake" in state["goal"].lower() or "snake" in normalized_target else state["package"]
-        success = install_game_from_store(device, game_pkg)
+        success = install_game_from_store(device, game_package)
     elif "launch" in normalized_action or "launch" in normalized_target or "play game" in normalized_target:
-        game_pkg = "com.netflix.NGP.Snakeio" if "snake" in state["goal"].lower() or "snake" in normalized_target else state["package"]
-        automation_logger.info(f"Launching application package: {game_pkg}")
-        success = device.launch_app(game_pkg)
+        automation_logger.info(f"Launching application package: {game_package}")
+        success = device.launch_app(game_package)
+        if success:
+            active_package = game_package
     else:
         # Standard low-level execution fallback
         if action_type == "TAP" and coordinates:
             coords = normalize_coordinates(coordinates, screenshot.size)
-            
-            # Check if this is a repeated tap on the same coordinates
-            is_repeat = False
-            if action_history:
-                last_hist = action_history[-1]
-                last_act = last_hist.get("action", {})
-                if last_act.get("action") == "TAP" and last_act.get("coordinates") == coordinates:
-                    if "static" in last_hist.get("result", "").lower():
-                        is_repeat = True
-            
-            if is_repeat:
-                import random
-                offset_x = coords[0] + random.choice([-25, 25])
-                offset_y = coords[1] + random.choice([-25, 25])
-                # Ensure offset stays in bounds
-                w, h = screenshot.size
-                offset_x = max(0, min(offset_x, w - 1))
-                offset_y = max(0, min(offset_y, h - 1))
-                
-                automation_logger.warning(f"[Action Recovery] Previous tap failed. Retrying with offset double-tap at ({offset_x}, {offset_y})")
-                device.tap(offset_x, offset_y)
-                time.sleep(0.15)
-                success = device.tap(offset_x, offset_y)
+            if _is_repeated_static_tap(action_history, coordinates):
+                success = _tap_with_offset_recovery(device, coords, screenshot.size, "Previous menu tap failed")
             else:
-                automation_logger.info(f"Executing raw ADB TAP at {coords[0]}, {coords[1]}")
+                automation_logger.info(f"Executing TAP at {coords[0]}, {coords[1]}")
                 success = device.tap(coords[0], coords[1])
         elif action_type == "SWIPE" and coordinates and len(coordinates) == 4:
             coords = normalize_coordinates(coordinates, screenshot.size)
@@ -251,33 +264,31 @@ def menu_navigator_node(state: AgentState) -> Dict[str, Any]:
     time.sleep(2.0)  # wait for animations
     post_screenshot = device.take_screenshot()
     post_xml = device.dump_hierarchy()
-    
-    # Resolve active package name
-    active_pkg = "com.netflix.NGP.Snakeio" if "snake" in state["goal"].lower() or "snake" in target_label.lower() else state["package"]
-    
+
     verified, msg = ActionVerifier.verify_action(
         before_img=screenshot,
         after_img=post_screenshot,
         action_type=action_type,
         expected_outcome=expected_outcome,
         post_xml=post_xml,
-        package_name=active_pkg
+        package_name=active_package
     )
-    
+
     automation_logger.info(f"[MenuNavigator Verification] {msg}")
 
-    # Update state history
+    # Update state history — keep last 5 entries to bound LLM context size
     step_summary = f"Action: {action_type} on '{target_label}'"
-    new_history = action_history + [{
+    new_history = (action_history + [{
         "state": step_summary,
         "action": decision,
         "result": msg
-    }]
+    }])[-5:]
 
     return {
         "action_history": new_history,
         "last_action": decision,
-        "last_result": msg
+        "last_result": msg,
+        "package": active_package
     }
 
 def gameplay_node(state: AgentState) -> Dict[str, Any]:
@@ -318,29 +329,18 @@ def gameplay_node(state: AgentState) -> Dict[str, Any]:
     # Execute Tap or Swipes
     success = False
     if action_type == "TAP" and coordinates:
-        coords = normalize_coordinates(coordinates, screenshot.size)
+        if isinstance(coordinates, str):
+            try:
+                cx, cy = CVEngine.grid_to_pixels(coordinates, screenshot.size)
+                coords = [cx, cy]
+            except Exception as e:
+                automation_logger.error(f"[Gameplay Node] Failed to parse grid coordinates '{coordinates}': {e}")
+                return {"status": "failed", "last_action": decision}
+        else:
+            coords = normalize_coordinates(coordinates, screenshot.size)
         
-        # Check if this is a repeated tap on the same coordinates
-        is_repeat = False
-        if action_history:
-            last_hist = action_history[-1]
-            last_act = last_hist.get("action", {})
-            if last_act.get("action") == "TAP" and last_act.get("coordinates") == coordinates:
-                if "static" in last_hist.get("result", "").lower():
-                    is_repeat = True
-                    
-        if is_repeat:
-            import random
-            offset_x = coords[0] + random.choice([-25, 25])
-            offset_y = coords[1] + random.choice([-25, 25])
-            w, h = screenshot.size
-            offset_x = max(0, min(offset_x, w - 1))
-            offset_y = max(0, min(offset_y, h - 1))
-            
-            automation_logger.warning(f"[Action Recovery] Previous gameplay tap failed. Retrying with offset double-tap at ({offset_x}, {offset_y})")
-            device.tap(offset_x, offset_y)
-            time.sleep(0.15)
-            success = device.tap(offset_x, offset_y)
+        if _is_repeated_static_tap(action_history, coordinates):
+            success = _tap_with_offset_recovery(device, coords, screenshot.size, "Previous gameplay tap failed")
         else:
             automation_logger.info(f"Executing gameplay TAP at {coords[0]}, {coords[1]}")
             success = device.tap(coords[0], coords[1])
@@ -355,24 +355,21 @@ def gameplay_node(state: AgentState) -> Dict[str, Any]:
     time.sleep(1.5)
     post_screenshot = device.take_screenshot()
     
-    # Resolve active package name
-    active_pkg = "com.netflix.NGP.Snakeio" if "snake" in state["goal"].lower() or "snake" in target_label.lower() else state["package"]
-    
     verified, msg = ActionVerifier.verify_action(
         before_img=screenshot,
         after_img=post_screenshot,
         action_type=action_type,
         expected_outcome=expected_outcome,
         post_xml="",
-        package_name=active_pkg
+        package_name=state["package"]
     )
     automation_logger.info(f"[Gameplay Verification] {msg}")
 
-    new_history = action_history + [{
+    new_history = (action_history + [{
         "state": f"Gameplay: {action_type} on '{target_label}'",
         "action": decision,
         "result": msg
-    }]
+    }])[-5:]
 
     return {
         "action_history": new_history,

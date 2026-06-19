@@ -55,3 +55,10 @@ class BaseDevice(ABC):
         Force-stop the application with the specified package name.
         """
         pass
+
+    @abstractmethod
+    def input_text(self, text: str) -> bool:
+        """
+        Type text into the currently focused input field on the device.
+        """
+        pass

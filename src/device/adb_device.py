@@ -116,6 +116,9 @@ class ADBDevice(BaseDevice):
 
         # 2. Cat the XML dump file
         cat_res = self._run_cmd(["shell", "cat", "/sdcard/window_dump.xml"])
+        if cat_res.returncode != 0 or not cat_res.stdout.strip():
+            automation_logger.error(f"[ADBDevice] Failed to read window_dump.xml: {cat_res.stderr.strip()}")
+            return ""
         xml_content = cat_res.stdout
 
         # 3. Clean up in background
@@ -157,4 +160,12 @@ class ADBDevice(BaseDevice):
         Force stop app.
         """
         res = self._run_cmd(["shell", "am", "force-stop", package_name])
+        return res.returncode == 0
+
+    def input_text(self, text: str) -> bool:
+        """
+        Type text into the currently focused input field via ADB.
+        Subprocess passes the text as a single argument so spaces are handled correctly.
+        """
+        res = self._run_cmd(["shell", "input", "text", text])
         return res.returncode == 0

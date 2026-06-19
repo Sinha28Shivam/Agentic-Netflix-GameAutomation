@@ -1,67 +1,59 @@
 import time
-import subprocess
 from src.device.base import BaseDevice
-from src.device.adb_device import ADB_EXE
 from src.utils.logger import automation_logger
 
 def toggle_network_connection(device: BaseDevice, enabled: bool) -> bool:
     """
-    Turns Wi-Fi and Mobile Data ON or OFF via ADB commands.
+    Enables or disables WiFi and Mobile Data.
+    Uses Appium network connection API (connection type 6 = WiFi+Data, 0 = none/airplane).
     """
-    state_str = "enable" if enabled else "disable"
-    automation_logger.info(f"Executing skill: toggle_network_connection -> {state_str.upper()}")
-    
+    state_str = "ON" if enabled else "OFF"
+    automation_logger.info(f"Executing skill: toggle_network_connection -> {state_str}")
     try:
-        # Toggle WiFi
-        subprocess.run([ADB_EXE, "shell", "svc", "wifi", state_str], check=True)
-        # Toggle Data
-        subprocess.run([ADB_EXE, "shell", "svc", "data", state_str], check=True)
-        
-        # Additional help command to ensure airplane mode status if needed
-        time.sleep(2.0) # Wait for network state to update
+        if hasattr(device, "driver"):
+            connection_type = 6 if enabled else 0
+            device.driver.set_network_connection(connection_type)
+        else:
+            automation_logger.warning("toggle_network_connection: device type does not support network toggle.")
+            return False
+        time.sleep(2.0)
         return True
     except Exception as e:
         automation_logger.error(f"Failed to toggle network connection: {e}")
         return False
 
+
 def rotate_device_orientation(device: BaseDevice, mode: str) -> bool:
     """
-    Rotates the device screen to landscape (1) or portrait (0).
+    Rotates the device to 'landscape' or 'portrait' via Appium driver orientation property.
     """
     automation_logger.info(f"Executing skill: rotate_device_orientation -> {mode.upper()}")
     try:
-        # Disable auto-rotate first (user_rotation is locked)
-        subprocess.run([ADB_EXE, "shell", "content", "insert", "--uri", "content://settings/system", "--bind", "name:s:accelerometer_rotation", "--bind", "value:i:0"], check=True)
-        
-        # Set rotation angle
-        rotation_val = "1" if mode == "landscape" else "0"
-        subprocess.run([ADB_EXE, "shell", "content", "insert", "--uri", "content://settings/system", "--bind", "name:s:user_rotation", "--bind", "value:i:" + rotation_val], check=True)
-        
+        if hasattr(device, "driver"):
+            device.driver.orientation = "LANDSCAPE" if mode == "landscape" else "PORTRAIT"
+        else:
+            automation_logger.warning("rotate_device_orientation: device type does not support orientation change.")
+            return False
         time.sleep(1.5)
         return True
     except Exception as e:
         automation_logger.error(f"Failed to rotate device screen: {e}")
         return False
 
+
 def adjust_device_volume(device: BaseDevice, level: str) -> bool:
     """
-    Mutes, unmutes, or changes device volume.
-    levels: 'mute', 'unmute', 'up', 'down'
+    Adjusts device volume via standard keycodes.
+    levels: 'mute' (164), 'unmute' (24), 'up' (24), 'down' (25)
     """
     automation_logger.info(f"Executing skill: adjust_device_volume -> {level.upper()}")
+    keycode_map = {"mute": 164, "unmute": 24, "up": 24, "down": 25}
+    key_code = keycode_map.get(level)
+    if key_code is None:
+        automation_logger.warning(f"Unknown volume level: '{level}'. Use mute/unmute/up/down.")
+        return False
     try:
-        if level == "mute":
-            # KEYCODE_VOLUME_MUTE = 164
-            device.keyevent(164)
-        elif level == "up":
-            # KEYCODE_VOLUME_UP = 24
-            device.keyevent(24)
-        elif level == "down":
-            # KEYCODE_VOLUME_DOWN = 25
-            device.keyevent(25)
-        elif level == "unmute":
-            # Send volume up once to unmute state
-            device.keyevent(24)
+        device.keyevent(key_code)
         return True
     except Exception as e:
         automation_logger.error(f"Failed to adjust device volume: {e}")
